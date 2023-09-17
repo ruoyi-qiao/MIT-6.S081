@@ -13,6 +13,11 @@ int main(int argc, char* argv[]) {
     int pid;
     int p[2];
     pipe(p);
+    /*
+        *  p[0] : read end fd
+        *  p[1] : write end fd
+        *  feed 2~35 to child
+    */
     if ((pid = fork()) != 0) {
         int pw = p[1], pr = p[0];
         close(pr);
@@ -25,13 +30,14 @@ int main(int argc, char* argv[]) {
         close(pw);
         wait(0);
         exit(0);
-    } else {
+    } else // every process is responsible for closing its own pr and pw
+    {
         int pw = p[1], pr = p[0];
         close(pw);
         while(1) {
             int n, sz;
             if ((sz = read(pr, &n, sizeof(n))) != sizeof(n)) {
-                close(pr);
+                close(pr); // child exit
                 if (sz == 0) {
                     exit(0);
                 }
@@ -43,10 +49,10 @@ int main(int argc, char* argv[]) {
                 int np[2];
                 pipe(np);
                 if ((pid = fork()) == 0) {
-                    close(np[1]);
+                    close(np[1]); // close useless write end for child
                     pr = np[0];
                 } else {
-                    close(np[0]);
+                    close(np[0]); // close useless read end for parent
                     pw = np[1];
                     for (; read(pr, &nxt, sizeof(nxt)) == sizeof(nxt);) {
                         if (nxt % n != 0) {
