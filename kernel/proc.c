@@ -126,7 +126,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->trace_mask = 0;
   return p;
 }
 
@@ -693,4 +693,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64
+count_process(void) {
+  struct proc *p;
+  uint64 cnt = 0;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock); 
+    if(p->state != UNUSED) {
+      cnt++;
+    }
+    release(&p->lock);
+  }
+  return cnt;
 }
