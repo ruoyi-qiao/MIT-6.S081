@@ -165,7 +165,7 @@ void
 vmmap(pagetable_t pgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
   if(mappages(pgtbl, va, sz, pa, perm) != 0)
-    panic("kvmmap");
+    panic("vmmap");
 }
 
 // translate a kernel virtual address to

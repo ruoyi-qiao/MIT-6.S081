@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.def": "biber",
+        "param.h": "c",
+        "defs.h": "c",
+        "types.h": "c"
+    }
+}

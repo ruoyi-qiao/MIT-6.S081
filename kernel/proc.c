@@ -1,10 +1,10 @@
-#include "proc.h"
-#include "defs.h"
-#include "memlayout.h"
+#include "types.h"
 #include "param.h"
+#include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
-#include "types.h"
+#include "proc.h"
+#include "defs.h"
 
 struct cpu cpus[NCPU];
 
@@ -137,7 +137,7 @@ found:
 void free_kpagetable(pagetable_t kpgtbl) {
     for (int i = 0; i < 512; i++) {
         pte_t pte = kpgtbl[i];
-        if ((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X) == 0)) {
+        if ((pte & PTE_V) && ((pte & (PTE_R | PTE_W | PTE_X)) == 0)) {
             uint64 child = PTE2PA(pte);
             free_kpagetable((pagetable_t)child);
             kpgtbl[i] = 0;
