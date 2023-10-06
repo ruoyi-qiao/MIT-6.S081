@@ -47,6 +47,43 @@ kvminit()
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
+// create a direct-map kernel page table for the user.
+void
+setup_user_kvm_pgtbl(pagetable_t pgtbl) {
+  // uart registers
+  
+  vmmap(pgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  vmmap(pgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  vmmap(pgtbl, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  vmmap(pgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  vmmap(pgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  vmmap(pgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  vmmap(pgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+}
+
+pagetable_t
+userspace_kvminit() {
+    pagetable_t pagetable = (pagetable_t) kalloc();
+    memset(pagetable, 0, PGSIZE);
+
+    setup_user_kvm_pgtbl(pagetable);
+
+    return pagetable;
+}
+
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
 void
@@ -121,6 +158,16 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
+// add a mapping to the page table specified by the parameter.
+// only used when booting.
+// does not flush TLB or enable paging.
+void
+vmmap(pagetable_t pgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pgtbl, va, sz, pa, perm) != 0)
+    panic("kvmmap");
+}
+
 // translate a kernel virtual address to
 // a physical address. only needed for
 // addresses on the stack.
@@ -141,6 +188,29 @@ kvmpa(uint64 va)
   return pa+off;
 }
 
+// translate a virtual address which 
+// belongs to a pagetable specficed 
+// by the parameter 'pgtbl' to
+// a physical address. only needed for
+// addresses on the stack.
+// assumes va is page aligned.
+uint64
+vmpa(pagetable_t pgtbl, uint64 va)
+{
+  uint64 off = va % PGSIZE;
+  pte_t *pte;
+  uint64 pa;
+  
+  pte = walk(pgtbl, va, 0);
+  if(pte == 0)
+    panic("vmpa");
+  if((*pte & PTE_V) == 0)
+    panic("vmpa");
+  pa = PTE2PA(*pte);
+  return pa+off;
+}
+
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
@@ -154,7 +224,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
-    if((pte = walk(pagetable, a, 1)) == 0)
+    if((pte = walk(pagetable, a, 1)) == 0) // kalloc failed and walk couldn't allocate a needed page-table page
       return -1;
     if(*pte & PTE_V)
       panic("remap");
@@ -444,7 +514,6 @@ void vmprint_r(pagetable_t pagetable, int level) {
     for (int i = 0; i < 512; i++) {
         pte_t pte = pagetable[i];
         if (pte & PTE_V) {
-
             for (int j = 0; j < level; j++)
                 printf(".. ");
             
