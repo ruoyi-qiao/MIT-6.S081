@@ -110,6 +110,7 @@ found:
     // An duplicate kernel page table.
     p->kpagetable = userspace_kvminit();
     if (p->kpagetable == 0) {
+        printf("allocproc: userspace_kvminit failed\n");
         proc_freepagetable(p->pagetable, p->sz);
         freeproc(p);
         release(&p->lock);
@@ -120,7 +121,7 @@ found:
     char* pa = kalloc();
     if (pa == 0)
         panic("kalloc");
-    uint64 va = KSTACK((int)(p - proc));
+    uint64 va = KSTACK((int)0);
     vmmap(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
     p->kstack = va;
 
@@ -172,6 +173,8 @@ static void freeproc(struct proc* p) {
     // 頁表的物理頁被釋放，而這些物理頁可能被其他進程的頁表引用
     
     free_kpagetable(p->kpagetable);
+    p->kpagetable = 0;
+    p->state = UNUSED;
 }
 
 // Create a user page table for a given process,
@@ -475,18 +478,16 @@ void scheduler(void) {
                 // before jumping back to us.
                 p->state = RUNNING;
                 c->proc = p;
-
                 // === new code begin ===
                 // 将进程的内核页表加载到内核的satp寄存器中
                 // & 将属于该进程的 TLB entry 清除
                 w_satp(MAKE_SATP(p->kpagetable));
                 sfence_vma();
+                printf("proc %d's TLB is cleared\n", p->pid);
                 // === new code end ===
 
                 swtch(&c->context, &p->context);
-
                 kvminithart();  // 无进程在运行， 使用全局内核页表
-
                 // Process is done running for now.
                 // It should have changed its p->state before coming back.
                 c->proc = 0;

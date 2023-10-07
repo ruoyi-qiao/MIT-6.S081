@@ -175,11 +175,13 @@ vmmap(pagetable_t pgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 uint64
 kvmpa(uint64 va)
 {
+  printf("kvmpa: va = %p\n", va);
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
   
   pte = walk(kernel_pagetable, va, 0);
+  printf("kvmpa: pte = %p PTE_V = %p\n", pte, PTE_V);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
