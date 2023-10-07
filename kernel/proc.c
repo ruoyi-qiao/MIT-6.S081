@@ -108,7 +108,7 @@ found:
     //========================= begin ============================
 
     // An duplicate kernel page table.
-    p->kpagetable = userspace_kvminit();
+    p->kpagetable = kvminit();
     if (p->kpagetable == 0) {
         printf("allocproc: userspace_kvminit failed\n");
         proc_freepagetable(p->pagetable, p->sz);
@@ -135,17 +135,6 @@ found:
     return p;
 }
 
-void free_kpagetable(pagetable_t kpgtbl) {
-    for (int i = 0; i < 512; i++) {
-        pte_t pte = kpgtbl[i];
-        if ((pte & PTE_V) && ((pte & (PTE_R | PTE_W | PTE_X)) == 0)) {
-            uint64 child = PTE2PA(pte);
-            free_kpagetable((pagetable_t)child);
-            kpgtbl[i] = 0;
-        }
-    }
-    kfree((void*)kpgtbl);
-}
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -171,7 +160,7 @@ static void freeproc(struct proc* p) {
 
     // 這裏不能直接調用 proc_freepagetable，因為這樣會導致
     // 頁表的物理頁被釋放，而這些物理頁可能被其他進程的頁表引用
-    
+    printf("freeproc: free kpagetable\n");
     free_kpagetable(p->kpagetable);
     p->kpagetable = 0;
     p->state = UNUSED;
