@@ -66,7 +66,6 @@ void
 kvminithart()
 {
   w_satp(MAKE_SATP(kernel_pagetable));
-  printf("kvminithart: satp = %p\n", r_satp());
   sfence_vma();
 }
 
@@ -150,15 +149,13 @@ vmmap(pagetable_t pgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // addresses on the stack.
 // assumes va is page aligned.
 uint64
-kvmpa(uint64 va)
+kvmpa(pagetable_t pgtbl, uint64 va)
 {
-  printf("kvmpa: va = %p\n", va);
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
   
-  pte = walk(kernel_pagetable, va, 0);
-  printf("kvmpa: pte = %p PTE_V = %p\n", pte, PTE_V);
+  pte = walk(pgtbl, va, 0);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
@@ -167,27 +164,6 @@ kvmpa(uint64 va)
   return pa+off;
 }
 
-// translate a virtual address which 
-// belongs to a pagetable specficed 
-// by the parameter 'pgtbl' to
-// a physical address. only needed for
-// addresses on the stack.
-// assumes va is page aligned.
-uint64
-vmpa(pagetable_t pgtbl, uint64 va)
-{
-  uint64 off = va % PGSIZE;
-  pte_t *pte;
-  uint64 pa;
-  
-  pte = walk(pgtbl, va, 0);
-  if(pte == 0)
-    panic("vmpa");
-  if((*pte & PTE_V) == 0)
-    panic("vmpa");
-  pa = PTE2PA(*pte);
-  return pa+off;
-}
 
 void free_kpagetable(pagetable_t kpgtbl) {
     for (int i = 0; i < 512; i++) {

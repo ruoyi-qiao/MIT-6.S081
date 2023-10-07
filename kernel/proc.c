@@ -119,6 +119,7 @@ found:
 
     // setup the pagetable for kernel stack.
     char* pa = kalloc();
+    memset(pa, 0, PGSIZE);
     if (pa == 0)
         panic("kalloc");
     uint64 va = KSTACK((int)0);
@@ -154,13 +155,13 @@ static void freeproc(struct proc* p) {
     p->xstate = 0;
     p->state = UNUSED;
     
-    uint64 pa = vmpa(p->kpagetable, p->kstack);
+    uint64 pa = kvmpa(p->kpagetable, p->kstack);
     kfree((void*)pa);
     p->kstack = 0;
 
     // 這裏不能直接調用 proc_freepagetable，因為這樣會導致
     // 頁表的物理頁被釋放，而這些物理頁可能被其他進程的頁表引用
-    printf("freeproc: free kpagetable\n");
+    // printf("freeproc: free kpagetable\n");
     free_kpagetable(p->kpagetable);
     p->kpagetable = 0;
     p->state = UNUSED;
@@ -472,7 +473,6 @@ void scheduler(void) {
                 // & 将属于该进程的 TLB entry 清除
                 w_satp(MAKE_SATP(p->kpagetable));
                 sfence_vma();
-                printf("proc %d's TLB is cleared\n", p->pid);
                 // === new code end ===
 
                 swtch(&c->context, &p->context);
