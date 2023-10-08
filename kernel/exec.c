@@ -54,6 +54,8 @@ exec(char *path, char **argv)
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
+    if(sz >= PLIC) 
+      goto bad;
     if(loadseg(pagetable, ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
   }
@@ -107,7 +109,12 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
-    
+
+  // clear user pgtbl in kernel pgtbl but why not clear physical memory?
+  // cuz it is done by proc_freepagetable() in line 123
+  uvmunmap(p->kpagetable, 0, PGROUNDUP(oldsz) / PGSIZE, 0);
+  sync_uvmalloc2kvm(pagetable, p->kpagetable, 0, sz); // copy user pgtbl to kernel pgtbl
+  
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
@@ -121,6 +128,7 @@ exec(char *path, char **argv)
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
+  printf("exec bad\n");
   if(pagetable)
     proc_freepagetable(pagetable, sz);
   if(ip){

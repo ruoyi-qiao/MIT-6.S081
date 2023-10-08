@@ -107,7 +107,6 @@ found:
     }
     //========================= begin ============================
 
-    // An duplicate kernel page table.
     p->kpagetable = kvminit();
     if (p->kpagetable == 0) {
         printf("allocproc: userspace_kvminit failed\n");
@@ -153,7 +152,6 @@ static void freeproc(struct proc* p) {
     p->chan = 0;
     p->killed = 0;
     p->xstate = 0;
-    p->state = UNUSED;
     
     uint64 pa = kvmpa(p->kpagetable, p->kstack);
     kfree((void*)pa);
@@ -226,6 +224,8 @@ void userinit(void) {
     // and data into it.
     uvminit(p->pagetable, initcode, sizeof(initcode));
     p->sz = PGSIZE;
+    // printf("userinit: p->sz = %d\n", p->sz);
+    sync_uvmalloc2kvm(p->pagetable, p->kpagetable, 0, p->sz);
 
     // prepare for the very first "return" from kernel to user.
     p->trapframe->epc = 0;      // user program counter
@@ -247,11 +247,20 @@ int growproc(int n) {
 
     sz = p->sz;
     if (n > 0) {
-        if ((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
-            return -1;
-        }
+    uint64 newsz;
+    if((newsz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+        return -1;
+    }
+    // synchrnoize the kernel page table (expand)
+    if(sync_uvmalloc2kvm(p->pagetable, p->kpagetable, sz, n) != 0) {
+        uvmdealloc(p->pagetable, newsz, sz);
+        return -1;
+    }
+    sz = newsz;
     } else if (n < 0) {
-        sz = uvmdealloc(p->pagetable, sz, sz + n);
+        uvmdealloc(p->pagetable, sz, sz + n);
+        // synchrnoize the kernel page table (shrink)
+        sz = sync_uvmdealloc2kvm(p->kpagetable, sz, sz + n);
     }
     p->sz = sz;
     return 0;
@@ -260,6 +269,7 @@ int growproc(int n) {
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int fork(void) {
+    // printf("fork\n");
     int i, pid;
     struct proc* np;
     struct proc* p = myproc();
@@ -270,7 +280,8 @@ int fork(void) {
     }
 
     // Copy user memory from parent to child.
-    if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
+    if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0 ||
+        sync_uvmalloc2kvm(np->pagetable, np->kpagetable, 0, p->sz) < 0) {
         freeproc(np);
         release(&np->lock);
         return -1;

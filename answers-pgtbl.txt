@@ -1,0 +1,1 @@
+The first two test fail but for which the third one is true happens when `srcva + len1` overflow uint64. So I think the problem is in the `srcva + len1` part. But I don't know how to fix it.
